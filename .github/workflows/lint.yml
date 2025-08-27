@@ -1,11 +1,17 @@
 name: Lint
 
 on:
-  workflow_call:   # 👈 makes it reusable
+  workflow_call:
     inputs:
       node-version:
         required: false
         default: '18'
+        type: string
+      pr-title:
+        required: false
+        type: string
+      pr-body:
+        required: false
         type: string
 
 jobs:
@@ -16,17 +22,19 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ inputs.node-version }}
+          node-version: ${{ inputs['node-version'] }}
       - name: Install dependencies
         run: npm ci
       - name: Run ESLint
-        run: npm run 
+        run: npm run lint
+
   pr-check:
+    if: ${{ inputs['pr-title'] != '' }}
     runs-on: ubuntu-latest
     steps:
       - name: Check PR Title
         run: |
-          TITLE="${{ github.event.pull_request.title }}"
+          TITLE="${{ inputs['pr-title'] }}"
           if [[ ! "$TITLE" =~ ^(feat|fix|chore|docs|refactor|test):\ .{5,}$ ]]; then
             echo "❌ Invalid PR title: $TITLE"
             echo "PR titles must follow Conventional Commits (feat|fix|chore|docs|refactor|test) and be descriptive."
@@ -35,7 +43,7 @@ jobs:
 
       - name: Check PR Description
         run: |
-          BODY="${{ github.event.pull_request.body }}"
+          BODY="${{ inputs['pr-body'] }}"
           if [ -z "$BODY" ] || [ ${#BODY} -lt 20 ]; then
             echo "❌ PR description is missing or too short."
             echo "PR description must be at least 20 characters long and explain WHY the change is needed."
