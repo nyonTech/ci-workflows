@@ -20,4 +20,24 @@ jobs:
       - name: Install dependencies
         run: npm ci
       - name: Run ESLint
-        run: npm run lint
+        run: npm run 
+  pr-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check PR Title
+        run: |
+          TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! "$TITLE" =~ ^(feat|fix|chore|docs|refactor|test):\ .{5,}$ ]]; then
+            echo "❌ Invalid PR title: $TITLE"
+            echo "PR titles must follow Conventional Commits (feat|fix|chore|docs|refactor|test) and be descriptive."
+            exit 1
+          fi
+
+      - name: Check PR Description
+        run: |
+          BODY="${{ github.event.pull_request.body }}"
+          if [ -z "$BODY" ] || [ ${#BODY} -lt 20 ]; then
+            echo "❌ PR description is missing or too short."
+            echo "PR description must be at least 20 characters long and explain WHY the change is needed."
+            exit 1
+          fi
