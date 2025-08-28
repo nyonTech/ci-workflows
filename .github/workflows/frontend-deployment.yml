@@ -22,9 +22,6 @@ on:
       production_branch:
         type: string
         default: 'main'
-      health_check_path:
-        type: string
-        default: '/health'
       enable_slack_notifications:
         type: boolean
         default: true
@@ -32,8 +29,8 @@ on:
         type: string
         default: '#deployments'
     secrets:
-      AWS_ACCESS_KEY_ID: { required: false }
-      AWS_SECRET_ACCESS_KEY: { required: false }
+      AWS_ACCOUNT_ID: { required: true }
+      AWS_IAM_ROLE: { required: true }
       AWS_REGION: { required: false }
       STAGING_S3_BUCKET: { required: false }
       PROD_S3_BUCKET: { required: false }
@@ -105,9 +102,8 @@ jobs:
           path: build/
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_IAM_ROLE }}
+          aws-region: ap-south-1
       - run: |
           aws s3 sync build/ s3://${{ secrets.PROD_S3_BUCKET }} --delete --cache-control max-age=31536000,public
           aws s3 cp build/index.html s3://${{ secrets.PROD_S3_BUCKET }}/index.html --cache-control max-age=0,no-cache,no-store,must-revalidate
