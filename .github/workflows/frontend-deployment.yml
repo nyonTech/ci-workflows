@@ -65,7 +65,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: frontend-${{ env.APP_NAME }}
-          path: build/
+          path: dist/
 
   deploy-staging-frontend:
     if: github.ref == format('refs/heads/{0}', inputs.staging_branch)
