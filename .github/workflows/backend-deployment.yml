@@ -97,9 +97,9 @@ jobs:
               git clone -b ${{ inputs.production_branch }} ${{ secrets.REPO_URL }} .
             else
               cd /home/ubuntu/${{ env.APP_NAME }}
-              git fetch origin
+              sudo git fetch origin ${{ inputs.production_branch }}
               git checkout ${{ inputs.production_branch }}
-              git pull origin ${{ inputs.production_branch }}
+              sudo git pull origin ${{ inputs.production_branch }}
             fi
             if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn install --production --frozen-lockfile
             elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm install --prod --frozen-lockfile
