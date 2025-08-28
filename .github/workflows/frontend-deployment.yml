@@ -43,6 +43,10 @@ env:
   PACKAGE_MANAGER: ${{ inputs.package_manager }}
   APP_NAME: ${{ inputs.app_name }}
 
+permissions:
+  id-token: write
+  contents: read  
+
 jobs:
   build-frontend:
     runs-on: ubuntu-latest
