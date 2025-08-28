@@ -1,0 +1,114 @@
+name: Frontend CI/CD Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        description: 'Application name'
+        required: true
+        type: string
+      node_version:
+        type: string
+        default: '18'
+      package_manager:
+        type: string
+        default: 'npm'
+      build_command:
+        type: string
+        default: 'build'
+      staging_branch:
+        type: string
+        default: 'develop'
+      production_branch:
+        type: string
+        default: 'main'
+      health_check_path:
+        type: string
+        default: '/health'
+      enable_slack_notifications:
+        type: boolean
+        default: true
+      slack_channel:
+        type: string
+        default: '#deployments'
+    secrets:
+      AWS_ACCESS_KEY_ID: { required: false }
+      AWS_SECRET_ACCESS_KEY: { required: false }
+      AWS_REGION: { required: false }
+      STAGING_S3_BUCKET: { required: false }
+      PROD_S3_BUCKET: { required: false }
+      STAGING_CF_DIST_ID: { required: false }
+      PROD_CF_DIST_ID: { required: false }
+      SLACK_WEBHOOK_URL: { required: false }
+      STAGING_URL: { required: false }
+      PROD_URL: { required: false }
+
+env:
+  NODE_VERSION: ${{ inputs.node_version }}
+  PACKAGE_MANAGER: ${{ inputs.package_manager }}
+  APP_NAME: ${{ inputs.app_name }}
+
+jobs:
+  build-frontend:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        environment: [staging, production]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: ${{ env.PACKAGE_MANAGER }}
+      - name: Install deps
+        run: |
+          if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn install --frozen-lockfile
+          elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm install --frozen-lockfile
+          else npm ci; fi
+      - name: Build frontend
+        run: |
+          if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn ${{ inputs.build_command }}:${{ matrix.environment }}
+          elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm ${{ inputs.build_command }}:${{ matrix.environment }}
+          else npm run ${{ inputs.build_command }}:${{ matrix.environment }}; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-${{ matrix.environment }}-${{ env.APP_NAME }}
+          path: build/
+
+  deploy-staging-frontend:
+    if: github.ref == format('refs/heads/{0}', inputs.staging_branch)
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-staging-${{ env.APP_NAME }}
+          path: build/
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - run: |
+          aws s3 sync build/ s3://${{ secrets.STAGING_S3_BUCKET }} --delete --cache-control max-age=31536000,public
+          aws s3 cp build/index.html s3://${{ secrets.STAGING_S3_BUCKET }}/index.html --cache-control max-age=0,no-cache,no-store,must-revalidate
+      - run: aws cloudfront create-invalidation --distribution-id ${{ secrets.STAGING_CF_DIST_ID }} --paths "/*"
+
+  deploy-production-frontend:
+    if: github.ref == format('refs/heads/{0}', inputs.production_branch)
+    needs: build-frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: frontend-production-${{ env.APP_NAME }}
+          path: build/
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - run: |
+          aws s3 sync build/ s3://${{ secrets.PROD_S3_BUCKET }} --delete --cache-control max-age=31536000,public
+          aws s3 cp build/index.html s3://${{ secrets.PROD_S3_BUCKET }}/index.html --cache-control max-age=0,no-cache,no-store,must-revalidate
+      - run: aws cloudfront create-invalidation --distribution-id ${{ secrets.PROD_CF_DIST_ID }} --paths "/*"

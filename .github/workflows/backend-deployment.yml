@@ -1,0 +1,111 @@
+name: Backend CI/CD Pipeline
+
+on:
+  workflow_call:
+    inputs:
+      app_name:
+        required: true
+        type: string
+      node_version:
+        type: string
+        default: '18'
+      package_manager:
+        type: string
+        default: 'npm'
+      staging_branch:
+        type: string
+        default: 'develop'
+      production_branch:
+        type: string
+        default: 'main'
+      backend_port_staging:
+        type: string
+        default: '3001'
+      backend_port_production:
+        type: string
+        default: '3000'
+      health_check_path:
+        type: string
+        default: '/health'
+      custom_deploy_script:
+        type: string
+        default: ''
+      enable_slack_notifications:
+        type: boolean
+        default: true
+      slack_channel:
+        type: string
+        default: '#deployments'
+    secrets:
+      STAGING_EC2_HOST: { required: false }
+      PROD_EC2_HOST: { required: false }
+      EC2_USERNAME: { required: false }
+      STAGING_EC2_KEY: { required: false }
+      PROD_EC2_KEY: { required: false }
+      REPO_URL: { required: false }
+      SLACK_WEBHOOK_URL: { required: false }
+      STAGING_URL: { required: false }
+      PROD_URL: { required: false }
+
+env:
+  APP_NAME: ${{ inputs.app_name }}
+  NODE_VERSION: ${{ inputs.node_version }}
+  PACKAGE_MANAGER: ${{ inputs.package_manager }}
+
+jobs:
+  deploy-staging-backend:
+    if: github.ref == format('refs/heads/{0}', inputs.staging_branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.STAGING_EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.STAGING_EC2_KEY }}
+          timeout: 300s
+          script: |
+            set -e
+            cd /home/ubuntu/${{ env.APP_NAME }}
+            sudo cp -r . ../app-backup-$(date +%Y%m%d-%H%M%S)
+            git fetch origin
+            git checkout ${{ inputs.staging_branch }}
+            git pull origin ${{ inputs.staging_branch }}
+            if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn install --production --frozen-lockfile
+            elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm install --prod --frozen-lockfile
+            else npm ci --production; fi
+            if [ -n "${{ inputs.custom_deploy_script }}" ]; then bash ${{ inputs.custom_deploy_script }} staging; fi
+            if pm2 describe $APP_NAME-staging > /dev/null 2>&1; then pm2 reload $APP_NAME-staging --wait-ready
+            else pm2 start ecosystem.config.js --env staging; fi
+            sleep 10
+            curl -f http://localhost:${{ inputs.backend_port_staging }}${{ inputs.health_check_path }}
+
+  deploy-production-backend:
+    if: github.ref == format('refs/heads/{0}', inputs.production_branch)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.PROD_EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.PROD_EC2_KEY }}
+          timeout: 600s
+          script: |
+            set -e
+            if [ ! -d "/home/ubuntu/${{ env.APP_NAME }}" ]; then
+              sudo mkdir -p /home/ubuntu/${{ env.APP_NAME }}
+              cd /home/ubuntu/${{ env.APP_NAME }}
+              git clone -b ${{ inputs.production_branch }} ${{ secrets.REPO_URL }} .
+            else
+              cd /home/ubuntu/${{ env.APP_NAME }}
+              git fetch origin
+              git checkout ${{ inputs.production_branch }}
+              git pull origin ${{ inputs.production_branch }}
+            fi
+            if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn install --production --frozen-lockfile
+            elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm install --prod --frozen-lockfile
+            else npm ci --production; fi
+            if [ -n "${{ inputs.custom_deploy_script }}" ]; then bash ${{ inputs.custom_deploy_script }} production; fi
+            if pm2 list | grep -q "$APP_NAME-production"; then pm2 reload $APP_NAME-production --wait-ready
+            else pm2 start npm --name "$APP_NAME-production" -- run prod; fi
+            sleep 15
+            curl -f http://localhost:${{ inputs.backend_port_production }}${{ inputs.health_check_path }} || exit 1
