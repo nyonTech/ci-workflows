@@ -37,8 +37,6 @@ on:
       STAGING_CF_DIST_ID: { required: false }
       PROD_CF_DIST_ID: { required: false }
       SLACK_WEBHOOK_URL: { required: false }
-      STAGING_URL: { required: false }
-      PROD_URL: { required: false }
 
 env:
   NODE_VERSION: ${{ inputs.node_version }}
@@ -103,7 +101,7 @@ jobs:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_IAM_ROLE }}
-          aws-region: ap-south-1
+          aws-region: ${{ secrets.AWS_REGION }}
       - run: |
           aws s3 sync build/ s3://${{ secrets.PROD_S3_BUCKET }} --delete --cache-control max-age=31536000,public
           aws s3 cp build/index.html s3://${{ secrets.PROD_S3_BUCKET }}/index.html --cache-control max-age=0,no-cache,no-store,must-revalidate
