@@ -46,9 +46,6 @@ env:
 jobs:
   build-frontend:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        environment: [staging, production]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -62,12 +59,12 @@ jobs:
           else npm ci; fi
       - name: Build frontend
         run: |
-          if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn ${{ inputs.build_command }}:${{ matrix.environment }}
-          elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm ${{ inputs.build_command }}:${{ matrix.environment }}
-          else npm run ${{ inputs.build_command }}:${{ matrix.environment }}; fi
+          if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn ${{ inputs.build_command }}
+          elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm ${{ inputs.build_command }}
+          else npm run ${{ inputs.build_command }}; fi
       - uses: actions/upload-artifact@v4
         with:
-          name: frontend-${{ matrix.environment }}-${{ env.APP_NAME }}
+          name: frontend-${{ env.APP_NAME }}
           path: build/
 
   deploy-staging-frontend:
