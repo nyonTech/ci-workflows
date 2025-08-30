@@ -91,21 +91,77 @@ jobs:
           timeout: 600s
           script: |
             set -e
-            if [ ! -d "/home/ubuntu/${{ env.APP_NAME }}" ]; then
-              sudo mkdir -p /home/ubuntu/${{ env.APP_NAME }}
-              cd /home/ubuntu/${{ env.APP_NAME }}
+
+            echo "=== DEPLOY STARTED ==="
+            echo "App: $APP_NAME"
+            echo "Branch: ${{ inputs.production_branch }}"
+            echo "Timestamp: $(date)"
+
+            cd /home/ubuntu/
+
+            # Clone or update repo
+            if [ ! -d "${{ env.APP_NAME }}" ]; then
+              echo "Directory not found. Cloning repo..."
+              sudo mkdir -p "${{ env.APP_NAME }}"
+              cd "${{ env.APP_NAME }}"
               git clone -b ${{ inputs.production_branch }} ${{ secrets.REPO_URL }} .
+              echo "Repo cloned successfully."
             else
-              cd /home/ubuntu/${{ env.APP_NAME }}
+              cd "${{ env.APP_NAME }}"
+              echo "Repo exists. Fetching latest changes..."
               sudo git fetch origin ${{ inputs.production_branch }}
               git checkout ${{ inputs.production_branch }}
               sudo git pull origin ${{ inputs.production_branch }}
+              echo "Repo updated successfully."
             fi
-            if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn install --production --frozen-lockfile
-            elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm install --prod --frozen-lockfile
-            else npm ci --production; fi
-            if [ -n "${{ inputs.custom_deploy_script }}" ]; then bash ${{ inputs.custom_deploy_script }} production; fi
-            if pm2 list | grep -q "$APP_NAME-production"; then pm2 reload $APP_NAME-production --wait-ready
-            else pm2 start npm --name "$APP_NAME-production" -- run prod; fi
+
+            # Stop the app before installing dependencies
+            if pm2 list | grep -q "$APP_NAME-production"; then
+              echo "Stopping existing PM2 process..."
+              pm2 delete "$APP_NAME-production"
+              echo "PM2 process stopped."
+            else
+              echo "No existing PM2 process found."
+            fi
+
+            # Install dependencies
+            echo "Installing dependencies using $PACKAGE_MANAGER..."
+            if [ "$PACKAGE_MANAGER" = "yarn" ]; then
+              yarn install --production --frozen-lockfile
+            elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then
+              pnpm install --prod --frozen-lockfile
+            else
+              npm ci --production
+            fi
+            echo "Dependencies installed successfully."
+
+            # Run custom deploy script if provided
+            if [ -n "${{ inputs.custom_deploy_script }}" ]; then
+              echo "Running custom deploy script..."
+              bash ${{ inputs.custom_deploy_script }} production
+              echo "Custom deploy script completed."
+            else
+              echo "No custom deploy script provided."
+            fi
+
+            # Start the app fresh with memory limit
+            echo "Starting PM2 process with memory limit 300M..."
+            pm2 start npm --name "$APP_NAME-production" -- run prod -- --max-memory-restart 300M
+            echo "PM2 process started."
+
+            # Wait for app to boot
+            echo "Waiting 15 seconds for app to start..."
             sleep 15
-            curl -f http://localhost:${{ inputs.backend_port_production }}${{ inputs.health_check_path }} || exit 1
+
+            # Health check
+            echo "Performing health check..."
+            if curl -f http://localhost:${{ inputs.backend_port_production }}${{ inputs.health_check_path }}; then
+              echo "Health check passed! Deployment successful."
+            else
+              echo "Health check failed! Exiting deployment."
+              exit 1
+            fi
+
+            echo "=== DEPLOY COMPLETED ==="
+            echo "Timestamp: $(date)"
+

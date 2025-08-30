@@ -106,6 +106,6 @@ jobs:
           audience: sts.amazonaws.com
           role-session-name: GitHubActions
       - run: |
-          aws s3 sync build/ s3://${{ secrets.PROD_S3_BUCKET }} --delete --cache-control max-age=31536000,public
+          aws s3 sync build/ s3://${{ secrets.PROD_S3_BUCKET }} --cache-control max-age=31536000,public
           aws s3 cp build/index.html s3://${{ secrets.PROD_S3_BUCKET }}/index.html --cache-control max-age=0,no-cache,no-store,must-revalidate
       - run: aws cloudfront create-invalidation --distribution-id ${{ secrets.PROD_CF_DIST_ID }} --paths "/*"
