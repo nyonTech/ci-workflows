@@ -63,6 +63,7 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.STAGING_EC2_KEY }}
           timeout: 300s
+          envs: APP_NAME,NODE_VERSION,PACKAGE_MANAGER
           script: |
             set -e
             cd /home/ubuntu/${{ env.APP_NAME }}
@@ -89,6 +90,7 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.PROD_EC2_KEY }}
           timeout: 600s
+          envs: APP_NAME,NODE_VERSION,PACKAGE_MANAGER
           script: |
             set -e
 
@@ -164,4 +166,3 @@ jobs:
 
             echo "=== DEPLOY COMPLETED ==="
             echo "Timestamp: $(date)"
-
