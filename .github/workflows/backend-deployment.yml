@@ -222,6 +222,9 @@ jobs:
             cd /home/ubuntu
             ls -dt app-backup-* 2>/dev/null | tail -n +6 | xargs -r rm -rf
 
+            # Return to repo directory for git commands
+            cd /home/ubuntu/${{ env.APP_NAME }}
+
             # Deployment metrics
             DEPLOY_END_TIME=$(date +%s)
             DEPLOY_DURATION=$((DEPLOY_END_TIME - DEPLOY_START_TIME))
