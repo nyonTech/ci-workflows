@@ -160,6 +160,7 @@ jobs:
 
             # Start the app using ecosystem config
             echo "Starting PM2 process from ecosystem config..."
+            cd /home/ubuntu/${{ env.APP_NAME }}
             pm2 start ecosystem.config.cjs --only "$APP_NAME-production"
             pm2 save
             echo "PM2 process started."
