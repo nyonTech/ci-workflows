@@ -69,8 +69,9 @@ jobs:
             cd /home/ubuntu/${{ env.APP_NAME }}
             sudo cp -r . ../app-backup-$(date +%Y%m%d-%H%M%S)
             git fetch origin
+            # Force reset to match remote branch, discarding local changes (like package-lock.json)
+            git reset --hard origin/${{ inputs.staging_branch }}
             git checkout ${{ inputs.staging_branch }}
-            git pull origin ${{ inputs.staging_branch }}
             if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn install --production --frozen-lockfile
             elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm install --prod --frozen-lockfile
             else
@@ -117,8 +118,9 @@ jobs:
               cd "${{ env.APP_NAME }}"
               echo "Repo exists. Fetching latest changes..."
               sudo git fetch origin ${{ inputs.production_branch }}
+              # Force reset to match remote branch, discarding local changes
+              sudo git reset --hard origin/${{ inputs.production_branch }}
               git checkout ${{ inputs.production_branch }}
-              sudo git pull origin ${{ inputs.production_branch }}
               echo "Repo updated successfully."
             fi
 
