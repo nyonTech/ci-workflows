@@ -76,7 +76,7 @@ jobs:
             elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm install --prod --frozen-lockfile
             else
               rm -rf node_modules
-              npm ci --production --ignore-scripts
+              npm ci --omit=dev
               npm rebuild
             fi
             if [ -n "${{ inputs.custom_deploy_script }}" ]; then bash ${{ inputs.custom_deploy_script }} staging; fi
@@ -140,8 +140,11 @@ jobs:
             elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then
               pnpm install --prod --frozen-lockfile
             else
+              # Remove node_modules to ensure clean install
               rm -rf node_modules
-              npm ci --production --ignore-scripts
+              # Install production dependencies (includes esm-module-alias)
+              npm ci --omit=dev
+              # Rebuild native modules for current platform
               npm rebuild
             fi
             echo "Dependencies installed successfully."
