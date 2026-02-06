@@ -73,7 +73,11 @@ jobs:
             git pull origin ${{ inputs.staging_branch }}
             if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn install --production --frozen-lockfile
             elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then pnpm install --prod --frozen-lockfile
-            else npm ci --production; fi
+            else
+              rm -rf node_modules
+              npm ci --production --ignore-scripts
+              npm rebuild
+            fi
             if [ -n "${{ inputs.custom_deploy_script }}" ]; then bash ${{ inputs.custom_deploy_script }} staging; fi
             if pm2 describe $APP_NAME-staging > /dev/null 2>&1; then pm2 reload $APP_NAME-staging --wait-ready
             else pm2 start ecosystem.config.js --env staging; fi
@@ -98,6 +102,7 @@ jobs:
             echo "App: $APP_NAME"
             echo "Branch: ${{ inputs.production_branch }}"
             echo "Timestamp: $(date)"
+            DEPLOY_START_TIME=$(date +%s)
 
             cd /home/ubuntu/
 
@@ -133,7 +138,9 @@ jobs:
             elif [ "$PACKAGE_MANAGER" = "pnpm" ]; then
               pnpm install --prod --frozen-lockfile
             else
-              npm ci --production
+              rm -rf node_modules
+              npm ci --production --ignore-scripts
+              npm rebuild
             fi
             echo "Dependencies installed successfully."
 
@@ -146,23 +153,80 @@ jobs:
               echo "No custom deploy script provided."
             fi
 
-            # Start the app fresh with memory limit
-            echo "Starting PM2 process with memory limit 300M..."
-            pm2 start npm --name "$APP_NAME-production" -- run prod -- --max-memory-restart 300M
+            # Start the app using ecosystem config
+            echo "Starting PM2 process from ecosystem config..."
+            pm2 start ecosystem.config.js --only "$APP_NAME-production"
+            pm2 save
             echo "PM2 process started."
 
             # Wait for app to boot
-            echo "Waiting 15 seconds for app to start..."
-            sleep 15
+            echo "Waiting 10 seconds for app to start..."
+            sleep 10
 
-            # Health check
-            echo "Performing health check..."
-            if curl -f http://localhost:${{ inputs.backend_port_production }}${{ inputs.health_check_path }}; then
-              echo "Health check passed! Deployment successful."
-            else
-              echo "Health check failed! Exiting deployment."
+            # Health check with retries
+            echo "Performing health check with retries..."
+            MAX_RETRIES=5
+            RETRY_COUNT=0
+            HEALTH_CHECK_PASSED=false
+
+            while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
+              echo "Attempt $((RETRY_COUNT + 1))/$MAX_RETRIES..."
+              
+              if curl -f -m 10 http://localhost:${{ inputs.backend_port_production }}${{ inputs.health_check_path }}; then
+                echo "✅ Health check passed!"
+                HEALTH_CHECK_PASSED=true
+                break
+              else
+                RETRY_COUNT=$((RETRY_COUNT + 1))
+                if [ $RETRY_COUNT -lt $MAX_RETRIES ]; then
+                  WAIT_TIME=$((5 * RETRY_COUNT))
+                  echo "Failed. Retrying in ${WAIT_TIME}s..."
+                  sleep $WAIT_TIME
+                fi
+              fi
+            done
+
+            if [ "$HEALTH_CHECK_PASSED" = false ]; then
+              echo "❌ Health check failed after $MAX_RETRIES attempts!"
+              echo "Initiating rollback..."
+              
+              pm2 delete "$APP_NAME-production" || true
+              
+              # Find the most recent backup
+              LATEST_BACKUP=$(ls -dt /home/ubuntu/app-backup-* 2>/dev/null | head -n 1)
+              
+              if [ -n "$LATEST_BACKUP" ]; then
+                echo "Rolling back to: $LATEST_BACKUP"
+                cd /home/ubuntu
+                rm -rf "$APP_NAME"
+                cp -r "$LATEST_BACKUP" "$APP_NAME"
+                cd "$APP_NAME"
+                pm2 start ecosystem.config.js --only "$APP_NAME-production"
+                pm2 save
+                echo "✅ Rollback completed. Previous version restored."
+              else
+                echo "⚠️ No backup found! Manual intervention required."
+              fi
+              
               exit 1
             fi
 
-            echo "=== DEPLOY COMPLETED ==="
-            echo "Timestamp: $(date)"
+            # Clean up old backups (keep last 5)
+            echo "Cleaning up old backups..."
+            cd /home/ubuntu
+            ls -dt app-backup-* 2>/dev/null | tail -n +6 | xargs -r rm -rf
+
+            # Deployment metrics
+            DEPLOY_END_TIME=$(date +%s)
+            DEPLOY_DURATION=$((DEPLOY_END_TIME - DEPLOY_START_TIME))
+            GIT_COMMIT=$(git rev-parse --short HEAD)
+
+            echo ""
+            echo "╔════════════════════════════════════════╗"
+            echo "║       DEPLOYMENT SUCCESSFUL            ║"
+            echo "╠════════════════════════════════════════╣"
+            echo "║ Duration:    ${DEPLOY_DURATION}s"
+            echo "║ Commit:      $GIT_COMMIT"
+            echo "║ Deployed by: ${{ github.actor }}"
+            echo "║ Timestamp:   $(date)"
+            echo "╚════════════════════════════════════════╝"

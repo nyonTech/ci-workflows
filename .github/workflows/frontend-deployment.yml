@@ -56,6 +56,18 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: ${{ env.PACKAGE_MANAGER }}
+      
+      - name: Cache Vite build
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules/.vite
+            .vite
+          key: ${{ runner.os }}-vite-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('src/**/*.jsx', 'src/**/*.js') }}
+          restore-keys: |
+            ${{ runner.os }}-vite-${{ hashFiles('**/package-lock.json') }}-
+            ${{ runner.os }}-vite-
+      
       - name: Install deps
         run: |
           if [ "$PACKAGE_MANAGER" = "yarn" ]; then yarn install --frozen-lockfile
@@ -70,6 +82,7 @@ jobs:
         with:
           name: frontend-${{ env.APP_NAME }}
           path: dist/
+          retention-days: 7
 
   deploy-staging-frontend:
     if: github.ref == format('refs/heads/{0}', inputs.staging_branch)
@@ -98,7 +111,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: frontend-${{ env.APP_NAME }}
-          path: build/
+          path: dist/
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_IAM_ROLE }}
@@ -106,6 +119,6 @@ jobs:
           audience: sts.amazonaws.com
           role-session-name: GitHubActions
       - run: |
-          aws s3 sync build/ s3://${{ secrets.PROD_S3_BUCKET }} --cache-control max-age=31536000,public
-          aws s3 cp build/index.html s3://${{ secrets.PROD_S3_BUCKET }}/index.html --cache-control max-age=0,no-cache,no-store,must-revalidate
+          aws s3 sync dist/ s3://${{ secrets.PROD_S3_BUCKET }} --delete --cache-control max-age=31536000,public
+          aws s3 cp dist/index.html s3://${{ secrets.PROD_S3_BUCKET }}/index.html --cache-control max-age=0,no-cache,no-store,must-revalidate
       - run: aws cloudfront create-invalidation --distribution-id ${{ secrets.PROD_CF_DIST_ID }} --paths "/*"
