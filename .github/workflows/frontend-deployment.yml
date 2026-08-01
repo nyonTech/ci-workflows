@@ -83,6 +83,7 @@ jobs:
           name: frontend-${{ env.APP_NAME }}
           path: dist/
           retention-days: 7
+          include-hidden-files: true
 
   deploy-staging-frontend:
     if: github.ref == format('refs/heads/{0}', inputs.staging_branch)
