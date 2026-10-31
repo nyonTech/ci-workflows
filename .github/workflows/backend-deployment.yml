@@ -66,6 +66,24 @@ jobs:
           envs: APP_NAME,NODE_VERSION,PACKAGE_MANAGER
           script: |
             set -e
+
+            # Load NVM for non-interactive SSH sessions
+            export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            [ -s "/home/ubuntu/.nvm/nvm.sh" ] && [ ! -s "$NVM_DIR/nvm.sh" ] && \. "/home/ubuntu/.nvm/nvm.sh"
+
+            if command -v nvm > /dev/null 2>&1; then
+              if [ -n "$NODE_VERSION" ] && nvm use "$NODE_VERSION" > /dev/null 2>&1; then
+                echo "Using requested Node version: $(node -v)"
+              else
+                nvm use default > /dev/null 2>&1 || true
+                echo "Using default NVM Node version: $(node -v)"
+              fi
+            fi
+
+            echo "Node path: $(which node || true)"
+            echo "Node version: $(node -v || true)"
+            echo "NPM version: $(npm -v || true)"
             cd /home/ubuntu/${{ env.APP_NAME }}
             sudo cp -r . ../app-backup-$(date +%Y%m%d-%H%M%S)
             git fetch origin
@@ -99,10 +117,27 @@ jobs:
           script: |
             set -e
 
+            # Load NVM for non-interactive SSH sessions
+            export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            [ -s "/home/ubuntu/.nvm/nvm.sh" ] && [ ! -s "$NVM_DIR/nvm.sh" ] && \. "/home/ubuntu/.nvm/nvm.sh"
+
+            if command -v nvm > /dev/null 2>&1; then
+              if [ -n "$NODE_VERSION" ] && nvm use "$NODE_VERSION" > /dev/null 2>&1; then
+                echo "Using requested Node version: $(node -v)"
+              else
+                nvm use default > /dev/null 2>&1 || true
+                echo "Using default NVM Node version: $(node -v)"
+              fi
+            fi
+
             echo "=== DEPLOY STARTED ==="
             echo "App: $APP_NAME"
             echo "Branch: ${{ inputs.production_branch }}"
             echo "Timestamp: $(date)"
+            echo "Node path: $(which node || true)"
+            echo "Node version: $(node -v || true)"
+            echo "NPM version: $(npm -v || true)"
             DEPLOY_START_TIME=$(date +%s)
 
             cd /home/ubuntu/
